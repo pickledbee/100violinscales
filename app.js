@@ -68,11 +68,12 @@ var Audio = (function () {
     var dry = c.createGain(); dry.gain.value = 0.82;
     var rev = c.createConvolver(); rev.buffer = impulse(c, 2.4, 3.2);
     var wet = c.createGain(); wet.gain.value = 0.32;
-    node.connect(dry); dry.connect(comp);
-    node.connect(rev); rev.connect(wet); wet.connect(comp);
+    var mix = c.createGain(); node.connect(mix);
+    mix.connect(dry); dry.connect(comp);
+    mix.connect(rev); rev.connect(wet); wet.connect(comp);
     var master = c.createGain(); master.gain.value = 0.9;
     comp.connect(master); master.connect(c.destination);
-    chain = { input: input, master: master };
+    chain = { input: input, mix: mix, master: master, wet: wet };
     return chain;
   }
 
@@ -149,6 +150,79 @@ var Audio = (function () {
     n.setTargetAtTime(0, tEnd - 0.02, 0.02);
     [osc, vib, drift, nz].forEach(function (o) { o.start(Math.max(c.currentTime, t0 - 0.01)); o.stop(tEnd + 0.3); live.push(o); });
   }
+
+  /* ---------- real violin recordings (VSCO-2 via tonejs-instruments, CC BY 3.0) ---------- */
+  var SAMPLES = [['G3',55,-1.7,0.018],['A3',57,-1.2,0.009],['C4',60,2.0,0.046],['E4',64,0.4,0.019],['G4',67,3.2,0.101],['A4',69,11.7,0.04],['C5',72,5.9,0.053],['E5',76,14.0,0.039],['G5',79,4.7,0.042],['A5',81,3.5,0.032],['C6',84,-6.6,0.066],['E6',88,11.5,0.059],['G6',91,9.0,0.031],['A6',93,10.0,0.01]];
+  var bufs = {}, loading = null, ready = false;
+  function load() {
+    if (ready) return Promise.resolve(true);
+    if (loading) return loading;
+    var c = ac();
+    loading = Promise.all(SAMPLES.map(function (sm) {
+      return fetch('samples/violin/' + sm[0] + '.mp3').then(function (r) { return r.arrayBuffer(); }).then(function (ab) {
+        return new Promise(function (res, rej) { c.decodeAudioData(ab, function (b) { bufs[sm[0]] = b; res(); }, rej); });
+      });
+    })).then(function () { ready = true; return true; }).catch(function () { loading = null; return false; });
+    return loading;
+  }
+  function nearest(m) {
+    var best = SAMPLES[0];
+    SAMPLES.forEach(function (sm) { if (Math.abs(sm[1] - m) < Math.abs(best[1] - m) || (Math.abs(sm[1] - m) === Math.abs(best[1] - m) && sm[1] < best[1])) best = sm; });
+    return best;
+  }
+  function voiceNote(m, t, d, offset, out, env, crisp) {
+    var c = ac(), sm = nearest(m), buf = bufs[sm[0]];
+    if (crisp) offset = Math.max(offset, sm[3] + 0.012);
+    var src = c.createBufferSource(); src.buffer = buf;
+    src.detune.value = (m - sm[1]) * 100 - sm[2];
+    var g = c.createGain(); g.gain.value = 0;
+    src.connect(g); g.connect(out);
+    var rate = Math.pow(2, src.detune.value / 1200);
+    if ((offset + d * rate) > buf.duration - 0.6) { src.loop = true; src.loopStart = 1.6; src.loopEnd = buf.duration - 0.7; }
+    env(g.gain);
+    src.start(Math.max(c.currentTime, t), offset); src.stop(t + d + 0.4); live.push(src);
+  }
+  function sampledStroke(notes, out, dyn) {
+    var L = 0.95 * dyn;
+    notes.forEach(function (nt, i) {
+      var t = nt.t, d = nt.d, a = nt.a, first = (i === 0), last = (i === notes.length - 1);
+      var connected = !first && (a === '' || a === 'te' || a === 'ac' || a === 'lo');
+      var tail = last ? 0.03 : 0.045;   /* bow change vs. finger change */
+      var off, env;
+      if (connected) {
+        off = 0.16;
+        env = function (g) {
+          var lv = a === 'lo' ? L * 0.82 : L;
+          g.setValueAtTime(0, t - 0.012); g.linearRampToValueAtTime(lv, t + 0.03);
+          if (a === 'lo') g.setTargetAtTime(L * 0.7, t + d * 0.5, d * 0.3);
+          g.setTargetAtTime(0, t + d - 0.006, tail * 0.5);
+        };
+      } else if (a === 'ma') {
+        off = 0.012;
+        env = function (g) { g.setValueAtTime(L * 1.45, t); g.setTargetAtTime(L * 0.8, t + 0.02, 0.05); g.setTargetAtTime(0, t + Math.min(d * 0.6, 0.45), 0.014); };
+      } else if (a === 'sp') {
+        off = 0.02;
+        env = function (g) { g.setValueAtTime(L * 1.15, t); g.setTargetAtTime(0, t + 0.012, Math.min(0.045, d * 0.28)); };
+      } else if (a === 'cl') {
+        off = 0.02;
+        env = function (g) { g.setValueAtTime(L * 1.05, t); g.setTargetAtTime(0, t + 0.01, 0.024); };
+      } else if (a === 'st' || a === 'ss') {
+        off = a === 'ss' && !first ? 0.06 : 0.015;
+        env = function (g) { g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * (a === 'ss' ? 0.92 : 1), t + 0.012); g.setTargetAtTime(0, t + Math.max(0.06, d * 0.5), 0.016); };
+      } else if (a === 'ac') {
+        off = 0.01;
+        env = function (g) { g.setValueAtTime(L * 1.4, t); g.setTargetAtTime(L * 0.95, t + 0.02, 0.07); g.setTargetAtTime(0, t + d - 0.006, tail * 0.5); };
+      } else {
+        off = d < 0.2 ? 0.025 : 0;
+        env = function (g) {
+          g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * (a === 'te' ? 1.05 : 1), t + (d < 0.2 ? 0.012 : 0.02));
+          if (a === 'lo') g.setTargetAtTime(L * 0.75, t + d * 0.5, d * 0.3);
+          g.setTargetAtTime(0, t + d - 0.006, tail * 0.5);
+        };
+      }
+      voiceNote(nt.m, t, d, off, out, env, !connected && ['ma', 'sp', 'cl', 'st', 'ss', 'ac'].indexOf(a) >= 0 || (!connected && d < 0.2));
+    });
+  }
   function click(t, accent, out) {
     var c = ac(), o = c.createOscillator(), g = c.createGain();
     o.type = 'triangle'; o.frequency.value = accent ? 1760 : 1320;
@@ -163,7 +237,8 @@ var Audio = (function () {
   /* events: [midi, ticks, strokeId, articulation]; 12 ticks = quarter note */
   function play(events, bpm, meter, opts) {
     stop(); var c = ac(), ch = getChain();
-    var voice = c.createGain(); voice.gain.value = 1; voice.connect(ch.input);
+    var voice = c.createGain(); voice.gain.value = 1; voice.connect(ready ? ch.mix : ch.input);
+    ch.wet.gain.value = ready ? 0.2 : 0.32;
     var clickOut = c.createGain(); clickOut.gain.value = 0.8; clickOut.connect(c.destination);
     var beatTicks = meter[1] === 8 ? 18 : 12, barTicks = meter[0] * (48 / meter[1]);
     var sec = 60 / (bpm * beatTicks), t0 = c.currentTime + 0.15, lead = 0;
@@ -180,7 +255,7 @@ var Audio = (function () {
     });
     total = t;
     var dyn = opts.dyn || 0.8;
-    strokes.forEach(function (s) { stroke(s.notes, voice, dyn, sec, start); });
+    strokes.forEach(function (s) { if (ready) sampledStroke(s.notes, voice, dyn); else stroke(s.notes, voice, dyn, sec, start); });
     if (opts.click) for (var k = 0; k <= total; k += beatTicks) click(start + k * sec, k % barTicks === 0, clickOut);
     var dur = (lead + total * sec) * 1000 + 600;
     if (opts.onProgress) {
@@ -205,7 +280,7 @@ var Audio = (function () {
     })();
   }
   function metroStop() { metroOn = false; stop(); }
-  return { play: play, stop: stop, metro: metro, metroStop: metroStop };
+  return { play: play, stop: stop, metro: metro, metroStop: metroStop, load: load, isReady: function () { return ready; } };
 })();
 
 /* ---------- player widgets ---------- */
@@ -223,11 +298,17 @@ function setupPlayers() {
     play.addEventListener('click', function () {
       if (playing) { Audio.stop(); reset(); return; }
       document.querySelectorAll('.player').forEach(function (q) { if (q !== p && q._reset) q._reset(); });
-      Audio.metroStop(); playing = true; play.textContent = '■ Stop';
-      Audio.play(ev, +range.value, meter, {
-        click: clickBox && clickBox.checked, countIn: countBox && countBox.checked, dyn: dyn,
-        onProgress: function (x) { bar.style.width = (x * 100) + '%'; }, onEnd: reset
-      });
+      Audio.metroStop(); playing = true;
+      var go = function () {
+        if (!playing) return;
+        play.textContent = '■ Stop';
+        Audio.play(ev, +range.value, meter, {
+          click: clickBox && clickBox.checked, countIn: countBox && countBox.checked, dyn: dyn,
+          onProgress: function (x) { bar.style.width = (x * 100) + '%'; }, onEnd: reset
+        });
+      };
+      if (Audio.isReady()) go();
+      else { play.textContent = 'Loading violin…'; Audio.load().then(go); }
     });
     if (met) met.addEventListener('click', function () {
       if (ticking) { Audio.metroStop(); reset(); return; }

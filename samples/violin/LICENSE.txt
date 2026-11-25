@@ -1,0 +1,6 @@
+Violin samples
+
+Source: Versilian Studios Chamber Orchestra 2 (VSCO-2), solo violin sustains,
+as prepared and distributed by tonejs-instruments (https://github.com/nbrosowsky/tonejs-instruments).
+License: Creative Commons Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/).
+Changes: trimmed to 6.5 seconds, leading silence removed, levels matched, fade-out added, re-encoded as MP3.
