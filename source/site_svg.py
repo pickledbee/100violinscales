@@ -27,8 +27,26 @@ def save_svg(systems, name, gap=6):
     return 'img/' + name + '.svg', round(w), round(h)
 
 
-def events(notes):
-    return [[n.p.semi + 12, n.dur] for n in notes]
+def events(notes, slurs=(), bw=None):
+    """[midi, ticks, stroke_id, articulation] for the play-along engine."""
+    cat = (bw or {}).get('cat', '')
+    inslur = {}
+    for a, b in slurs:
+        for k in range(a, b + 1): inslur[k] = a
+    sid, out = -1, []
+    for i, n in enumerate(notes):
+        if i not in inslur or inslur[i] == i: sid += 1
+        a, art = n.art, ''
+        if 'wedge' in a: art = 'ma'
+        elif 'acc' in a: art = 'ac'
+        elif 'ten' in a: art = 'lo' if i in inslur else 'te'
+        elif 'stacc' in a:
+            art = 'ss' if i in inslur else {'Spiccato': 'sp', 'Collé': 'cl'}.get(cat, 'st')
+        out.append([n.p.semi + 12, n.dur, sid, art])
+    return out
+
+
+DYN = {'p': 0.6, 'mf': 0.8, 'f': 1.0}
 
 
 def scale_assets():
@@ -39,17 +57,17 @@ def scale_assets():
         fing = [f for (_, f, _) in e['strings']]
         sL, sM = Staff(7.0), Staff(6.2)
         main = BK.engrave(e['seq'], bw, fing, e.get('posmarks'), tonic=e['tonic'], mode=e['mode'], staff=sL)
-        notes, *_ = S.build(e['seq'], bw)
+        notes, slurs_main, *_ = S.build(e['seq'], bw)
         rh, sname = BK.open_string_bar(bw, e, sM)
         if e['kind'] == 'pos':
             sec = BK.arpeggio_for(e, sM)
             up, _ = S.scale_seq(e['tonic'], 'harmonic' if e['mode'] != 'major' else 'major')
             a_up = [up[i] for i in [0, 2, 4, 7, 9, 11, 14]]
-            sec_notes, *_ = S.build(a_up + a_up[::-1][1:], B['LEG3_E'])
+            sec_notes, sec_slurs, *_ = S.build(a_up + a_up[::-1][1:], B['LEG3_E']); sec_bw = B['LEG3_E']
             sec_kind = 'arp'
         else:
             sec = BK.slow_pass(e, sM)
-            sec_notes, *_ = S.build(e['seq'], B['DET_Q'])
+            sec_notes, sec_slurs, *_ = S.build(e['seq'], B['DET_Q']); sec_bw = B['DET_Q']
             sec_kind = 'slow'
         m = save_svg(main, f's{num:03d}', 4)
         r = save_svg(rh, f's{num:03d}-rh')
@@ -78,7 +96,7 @@ def scale_assets():
             key=S.pretty(e['tonic']), bowing=bw['title'], cat=bw['cat'], label=bw['label'],
             tempo=bw['tempo'], tlo=lo, thi=hi, meter=list(bw['meter']), focus=tip, extra=extra,
             string=sname, main=m, rh=r, sec=s2, sec_kind=sec_kind, main_m=mm, sec_m=s2m, mscale=msc,
-            audio=events(notes), sec_audio=events(sec_notes), sec_meter=[6, 8] if sec_kind == 'arp' else [4, 4]))
+            audio=events(notes, slurs_main, bw), sec_audio=events(sec_notes, sec_slurs, sec_bw), dyn=DYN[bw['dyn']], sec_meter=[6, 8] if sec_kind == 'arp' else [4, 4]))
     return data
 
 
@@ -98,7 +116,7 @@ def guide_assets():
         al, kn = keysig_alters(parse('A4'), 'major')
         syss = st.engrave(cut, (2, 4), kn, al, 260, first_timesig=False, slurs=sl, final_bar=False)
         img = save_svg(syss, 'guide-' + key.lower())
-        out.append(dict(name=name, key=key, where=where, how=how, mistake=mistake, fix=fix, img=img))
+        out.append(dict(audio=events(cut, sl, bw), dyn=DYN[bw['dyn']], name=name, key=key, where=where, how=how, mistake=mistake, fix=fix, img=img))
     return out
 
 
@@ -122,7 +140,7 @@ def rhythm_assets():
             notes.append(n)
         syss = st.engrave(notes, (2, 4), kn, al, 260, slurs=[], final_bar=False)
         img = save_svg(syss, f'rhythm-{i + 1}')
-        out.append(dict(name=name, tip=tip, img=img, audio=[[n.p.semi + 12, n.dur] for n in notes]))
+        out.append(dict(name=name, tip=tip, img=img, audio=events(notes)))
     return out
 
 
@@ -137,7 +155,7 @@ def arpeggio_assets():
         img = save_svg(syss, f'arp-{i:02d}')
         imgm = save_svg(Staff(6.6).engrave(S.build(a['seq'], bw, a['fingers'])[0], meter, kn, al, 330, slurs=slurs), f'arp-{i:02d}-m')
         out.append(dict(num=i, img_m=imgm, key=S.pretty(a['tonic']), mode='Major' if a['mode'] == 'major' else 'Minor',
-                        pos=a['pos'], img=img, audio=events(notes)))
+                        pos=a['pos'], img=img, audio=events(notes, slurs, bw)))
     return out
 
 

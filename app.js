@@ -13,60 +13,176 @@ var Store = {
   clear: function () { try { localStorage.removeItem(this.key); } catch (e) { } }
 };
 
-/* ---------- audio ---------- */
+/* ---------- audio: bowed-string violin model ---------- */
 var Audio = (function () {
-  var ctx = null, live = [], timers = [];
+  var ctx = null, live = [], timers = [], chain = null, wave = null, noiseBuf = null;
   function ac() {
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended' && ctx.resume) { try { var r = ctx.resume(); if (r && r.catch) r.catch(function () { }); } catch (e) { } }
     return ctx;
   }
   function freq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function tone(m, t, d, out) {
-    var c = ac(), g = c.createGain(), f = c.createBiquadFilter();
-    f.type = 'lowpass'; f.frequency.value = 2600; f.Q.value = 0.8;
-    var o1 = c.createOscillator(), o2 = c.createOscillator();
-    o1.type = 'sawtooth'; o2.type = 'sawtooth';
-    o1.frequency.value = freq(m); o2.frequency.value = freq(m) * 1.003;
-    var lfo = c.createOscillator(), lg = c.createGain();
-    lfo.frequency.value = 5.4; lg.gain.value = freq(m) * 0.0035;
-    lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
-    o1.connect(f); o2.connect(f); f.connect(g); g.connect(out);
-    var end = t + Math.max(0.08, d * 0.94);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.16, t + 0.035);
-    g.gain.setValueAtTime(0.14, Math.max(t + 0.04, end - 0.05));
-    g.gain.linearRampToValueAtTime(0, end);
-    [o1, o2, lfo].forEach(function (o) { o.start(t); o.stop(end + 0.02); live.push(o); });
+
+  /* Bowed string: sawtooth-like Helmholtz motion. Bowing at about 1/9 of the string
+     length notches every 9th harmonic, which is what gives a real violin its colour. */
+  function violinWave(c) {
+    var N = 48, re = new Float32Array(N + 1), im = new Float32Array(N + 1), beta = 1 / 9.2;
+    for (var n = 1; n <= N; n++) {
+      var comb = Math.abs(Math.sin(Math.PI * n * beta)) / Math.sin(Math.PI * beta);
+      im[n] = (1 / n) * (0.35 + 0.65 * comb) * (n > 24 ? Math.pow(0.93, n - 24) : 1);
+    }
+    return c.createPeriodicWave(re, im);
+  }
+  function impulse(c, secs, decay) {
+    var len = Math.floor(c.sampleRate * secs), buf = c.createBuffer(2, len, c.sampleRate);
+    for (var ch = 0; ch < 2; ch++) {
+      var d = buf.getChannelData(ch), lp = 0;
+      for (var i = 0; i < len; i++) {
+        var t = i / len, x = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+        lp += (x - lp) * (0.45 - 0.35 * t);  /* darker as the room tail fades */
+        d[i] = i < c.sampleRate * 0.012 ? 0 : lp;
+      }
+    }
+    return buf;
+  }
+  function getChain() {
+    if (chain) return chain;
+    var c = ac();
+    wave = violinWave(c);
+    noiseBuf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    var nd = noiseBuf.getChannelData(0);
+    for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    var input = c.createGain();
+    /* violin body: air mode, main wood modes, nasal dip, bridge hill, top roll-off */
+    var specs = [['highpass', 185, 0.7, 0], ['peaking', 285, 2.2, 5], ['peaking', 470, 2.8, 4], ['peaking', 560, 3, 2.5],
+                 ['peaking', 1150, 1.2, -3], ['peaking', 2400, 1.6, 4.5], ['peaking', 3100, 1.8, 3.5],
+                 ['peaking', 4600, 1.5, -4], ['lowpass', 7800, 0.6, 0]];
+    var node = input;
+    specs.forEach(function (sp) {
+      var f = c.createBiquadFilter(); f.type = sp[0]; f.frequency.value = sp[1]; f.Q.value = sp[2];
+      if (sp[0] === 'peaking') f.gain.value = sp[3];
+      node.connect(f); node = f;
+    });
+    var comp = c.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.25;
+    var dry = c.createGain(); dry.gain.value = 0.82;
+    var rev = c.createConvolver(); rev.buffer = impulse(c, 2.4, 3.2);
+    var wet = c.createGain(); wet.gain.value = 0.32;
+    node.connect(dry); dry.connect(comp);
+    node.connect(rev); rev.connect(wet); wet.connect(comp);
+    var master = c.createGain(); master.gain.value = 0.9;
+    comp.connect(master); master.connect(c.destination);
+    chain = { input: input, master: master };
+    return chain;
+  }
+
+  /* One bow stroke = one oscillator. Notes inside a slur change pitch on the same
+     oscillator, so legato is truly connected; separate bows get a new stroke. */
+  function stroke(notes, out, dyn, sec, startT) {
+    var c = ac(), L = 0.2 * dyn;
+    var t0 = notes[0].t, tEnd = notes[notes.length - 1].t + notes[notes.length - 1].d;
+    var osc = c.createOscillator(); osc.setPeriodicWave(wave);
+    var amp = c.createGain(); amp.gain.value = 0;
+    /* vibrato and a little natural pitch drift, in cents */
+    var vib = c.createOscillator(), vg = c.createGain();
+    vib.frequency.value = 5.3 + Math.random() * 0.7; vg.gain.value = 0;
+    var drift = c.createOscillator(), dg = c.createGain();
+    drift.frequency.value = 0.4 + Math.random() * 0.5; dg.gain.value = 2.5;
+    vib.connect(vg); vg.connect(osc.detune); drift.connect(dg); dg.connect(osc.detune);
+    /* bow noise: rosin hiss that follows the stroke, plus a bite at each attack */
+    var nz = c.createBufferSource(); nz.buffer = noiseBuf; nz.loop = true;
+    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 0.9;
+    var ng = c.createGain(); ng.gain.value = 0;
+    nz.connect(bp); bp.connect(ng); ng.connect(out);
+    osc.connect(amp); amp.connect(out);
+    /* rosin hiss shaped by the string's own motion, so it follows every stroke */
+    var hissG = c.createGain(); hissG.gain.value = 0; bp.connect(hissG); amp.connect(hissG.gain);
+    var hs = c.createGain(); hs.gain.value = 0.3; hissG.connect(hs); hs.connect(out);
+    var g = amp.gain, n = ng.gain, v = vg.gain;
+    g.setValueAtTime(0, t0); n.setValueAtTime(0, t0); v.setValueAtTime(0, t0);
+    notes.forEach(function (nt, i) {
+      var t = nt.t, d = nt.d, f = freq(nt.m), a = nt.a, first = (i === 0);
+      if (first) { osc.frequency.setValueAtTime(f * 0.996, t); osc.frequency.setTargetAtTime(f, t, 0.02); }
+      else osc.frequency.setTargetAtTime(f, t, a === 'ss' ? 0.004 : 0.012);
+      /* vibrato blooms on longer notes, stays narrow on fast ones */
+      var vmax = d > 0.5 ? 17 : d > 0.25 ? 12 : 5;
+      v.setTargetAtTime(3, t, 0.02);
+      v.setTargetAtTime(vmax, t + Math.min(0.18, d * 0.35), Math.max(0.05, d * 0.25));
+      var end = t + d;
+      function bite(k, len) { n.setValueAtTime(L * k, t); n.setTargetAtTime(0, t + 0.005, len); }
+      if (!first && (a === '' || a === 'te' || a === 'ac')) {
+        /* connected note in a slur: tiny finger articulation, no new attack */
+        g.setTargetAtTime(L * 0.9, t, 0.01); g.setTargetAtTime(L, t + 0.03, 0.03);
+        return;
+      }
+      if (!first && a === 'lo') { g.setTargetAtTime(L * 0.55, t - 0.02, 0.012); g.setTargetAtTime(L, t + 0.02, 0.04); g.setTargetAtTime(L * 0.78, t + d * 0.55, d * 0.3); return; }
+      if (a === 'ss') {
+        g.setTargetAtTime(L, t, 0.008); bite(0.35, 0.02);
+        g.setTargetAtTime(0, t + Math.max(0.05, d * 0.5), 0.012); return;
+      }
+      if (first && a === 'lo') { g.setTargetAtTime(L, t, 0.03); bite(0.2, 0.03); g.setTargetAtTime(L * 0.78, t + d * 0.55, d * 0.3); return; }
+      if (a === 'ma') {
+        g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * 1.55, t + 0.008); g.setTargetAtTime(L * 0.75, t + 0.01, 0.05);
+        bite(0.9, 0.025); g.setTargetAtTime(0, t + Math.min(d * 0.6, 0.45), 0.015); return;
+      }
+      if (a === 'sp') {
+        g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * 1.05, t + 0.004); g.setTargetAtTime(0, t + 0.01, Math.min(0.045, d * 0.3));
+        bite(0.7, 0.012); return;
+      }
+      if (a === 'cl') {
+        g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * 0.9, t + 0.003); g.setTargetAtTime(0, t + 0.008, 0.025);
+        bite(1.0, 0.01); return;
+      }
+      if (a === 'st') {
+        g.setTargetAtTime(L, t, 0.012); bite(0.45, 0.02); g.setTargetAtTime(0, t + Math.max(0.06, d * 0.5), 0.015); return;
+      }
+      if (a === 'ac') {
+        g.setValueAtTime(0, t); g.linearRampToValueAtTime(L * 1.45, t + 0.012); g.setTargetAtTime(L * 0.9, t + 0.015, 0.07);
+        bite(0.6, 0.03); return;
+      }
+      /* plain détaché / first note of a slur / tenuto: smooth bow start */
+      g.setTargetAtTime(L * (a === 'te' ? 1.05 : 1), t, d < 0.2 ? 0.012 : 0.03); bite(d < 0.2 ? 0.3 : 0.4, 0.035);
+    });
+    /* end of the bow: brief release before the bow changes direction */
+    var last = notes[notes.length - 1].a;
+    if (['ma', 'sp', 'cl', 'st', 'ss'].indexOf(last) < 0) g.setTargetAtTime(0, tEnd - Math.min(0.035, (tEnd - t0) * 0.15), 0.012);
+    n.setTargetAtTime(0, tEnd - 0.02, 0.02);
+    [osc, vib, drift, nz].forEach(function (o) { o.start(Math.max(c.currentTime, t0 - 0.01)); o.stop(tEnd + 0.3); live.push(o); });
   }
   function click(t, accent, out) {
     var c = ac(), o = c.createOscillator(), g = c.createGain();
-    o.type = 'square'; o.frequency.value = accent ? 1600 : 1050;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(accent ? 0.22 : 0.14, t + 0.002);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    o.type = 'triangle'; o.frequency.value = accent ? 1760 : 1320;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(accent ? 0.3 : 0.18, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
     o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.06); live.push(o);
   }
   function stop() {
     live.forEach(function (o) { try { o.stop(); } catch (e) { } }); live = [];
     timers.forEach(clearTimeout); timers = [];
   }
-  /* events: [[midi, ticks]] with 12 ticks = quarter; meter [num, den] */
+  /* events: [midi, ticks, strokeId, articulation]; 12 ticks = quarter note */
   function play(events, bpm, meter, opts) {
-    stop(); var c = ac(), out = c.createGain(); out.gain.value = 0.9; out.connect(c.destination);
-    var beatTicks = meter[1] === 8 ? 18 : 12;
-    var barTicks = meter[0] * (48 / meter[1]);
-    var sec = 60 / (bpm * beatTicks);
-    var t0 = c.currentTime + 0.12, lead = 0;
+    stop(); var c = ac(), ch = getChain();
+    var voice = c.createGain(); voice.gain.value = 1; voice.connect(ch.input);
+    var clickOut = c.createGain(); clickOut.gain.value = 0.8; clickOut.connect(c.destination);
+    var beatTicks = meter[1] === 8 ? 18 : 12, barTicks = meter[0] * (48 / meter[1]);
+    var sec = 60 / (bpm * beatTicks), t0 = c.currentTime + 0.15, lead = 0;
     if (opts.countIn) {
-      var beats = barTicks / beatTicks;
-      for (var b = 0; b < beats; b++) click(t0 + b * beatTicks * sec, b === 0, out);
+      for (var b = 0; b < barTicks / beatTicks; b++) click(t0 + b * beatTicks * sec, b === 0, clickOut);
       lead = barTicks * sec;
     }
-    var start = t0 + lead, t = 0, total = 0;
-    events.forEach(function (e) { total += e[1]; });
-    events.forEach(function (e) { tone(e[0], start + t * sec, e[1] * sec, out); t += e[1]; });
-    if (opts.click) for (var k = 0; k <= total; k += beatTicks) click(start + k * sec, k % barTicks === 0, out);
-    var dur = (lead + total * sec) * 1000 + 300;
+    var start = t0 + lead, t = 0, strokes = [], cur = null, total = 0;
+    events.forEach(function (e, i) {
+      var sid = e.length > 2 ? e[2] : i, art = e.length > 3 ? e[3] : '';
+      var nt = { m: e[0], t: start + t * sec, d: e[1] * sec, a: art };
+      if (!cur || cur.sid !== sid) { cur = { sid: sid, notes: [] }; strokes.push(cur); }
+      cur.notes.push(nt); t += e[1];
+    });
+    total = t;
+    var dyn = opts.dyn || 0.8;
+    strokes.forEach(function (s) { stroke(s.notes, voice, dyn, sec, start); });
+    if (opts.click) for (var k = 0; k <= total; k += beatTicks) click(start + k * sec, k % barTicks === 0, clickOut);
+    var dur = (lead + total * sec) * 1000 + 600;
     if (opts.onProgress) {
       var st = performance.now();
       (function tick() {
@@ -79,7 +195,7 @@ var Audio = (function () {
   }
   var metroOn = false;
   function metro(bpm, meter) {
-    stop(); metroOn = true; var c = ac(), out = c.createGain(); out.connect(c.destination);
+    stop(); metroOn = true; var c = ac(), out = c.createGain(); out.gain.value = 0.8; out.connect(c.destination);
     var beatTicks = meter[1] === 8 ? 18 : 12, beats = meter[0] * (48 / meter[1]) / beatTicks;
     var period = 60 / bpm, next = c.currentTime + 0.1, i = 0;
     (function sched() {
@@ -95,7 +211,7 @@ var Audio = (function () {
 /* ---------- player widgets ---------- */
 function setupPlayers() {
   document.querySelectorAll('.player').forEach(function (p) {
-    var ev = JSON.parse(p.dataset.events), meter = JSON.parse(p.dataset.meter);
+    var ev = JSON.parse(p.dataset.events), meter = JSON.parse(p.dataset.meter), dyn = +(p.dataset.dyn || 0.8);
     var range = p.querySelector('input[type=range]'), bpm = p.querySelector('.bpm');
     var play = p.querySelector('.play'), met = p.querySelector('.met');
     var clickBox = p.querySelector('.clk'), countBox = p.querySelector('.cnt'), bar = p.querySelector('.prog i');
@@ -109,7 +225,7 @@ function setupPlayers() {
       document.querySelectorAll('.player').forEach(function (q) { if (q !== p && q._reset) q._reset(); });
       Audio.metroStop(); playing = true; play.textContent = '■ Stop';
       Audio.play(ev, +range.value, meter, {
-        click: clickBox && clickBox.checked, countIn: countBox && countBox.checked,
+        click: clickBox && clickBox.checked, countIn: countBox && countBox.checked, dyn: dyn,
         onProgress: function (x) { bar.style.width = (x * 100) + '%'; }, onEnd: reset
       });
     });

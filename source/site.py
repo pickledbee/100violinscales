@@ -37,9 +37,9 @@ def page(fn, title, desc, body, active=None, script=''):
     open(os.path.join(OUT, fn), 'w').write(doc)
 
 
-def player(events, meter, lo, hi, met=True, label='Play'):
+def player(events, meter, lo, hi, met=True, label='Play', dyn=0.8):
     lo2 = max(30, lo)
-    return f'''<div class="player" data-events='{json.dumps(events)}' data-meter='{json.dumps(meter)}'>
+    return f'''<div class="player" data-events='{json.dumps(events)}' data-meter='{json.dumps(meter)}' data-dyn='{dyn}'>
 <button class="btn wine play">▶ {label}</button>
 {'<button class="btn line met">Metronome</button>' if met else ''}
 <span class="bpm"></span><input type="range" min="30" max="{max(160, hi + 20)}" value="{lo2}" aria-label="Tempo">
@@ -124,7 +124,7 @@ def scale_pages():
 <div class="focus"><b>TODAY'S FOCUS</b><p>{E(s['focus'])} {E(s['extra'])}</p></div>
 <div class="block"><h2>The scale</h2><p class="note">Written bowing, every finger number shown.</p>
 <div class="notation">{pic(s['main'], s['main_m'], E(s['title']) + ', ' + E(s['sub']) + ', ' + E(s['bowing']), s['mscale'])}</div>
-{player(s['audio'], s['meter'], s['tlo'], s['thi'])}</div>
+{player(s['audio'], s['meter'], s['tlo'], s['thi'], dyn=s['dyn'])}</div>
 <div class="block"><h2>Right hand first</h2>
 <div class="two"><p class="note" style="margin:0">Play the bowing alone on the open {s['string']} string until the stroke feels easy and the sound is even. Then play the scale.</p>
 <div class="notation small"><img src="{s['rh'][0]}" alt="Bowing pattern on the open {s['string']} string"></div></div></div>
@@ -195,14 +195,10 @@ def bowing():
     cards = ''
     for g in D['guide']:
         bw = S.B[g['key']]
-        notes, *_ = S.build(S.scale_seq(S.parse('A4'), 'major', 1)[0][:8] + [S.parse('A5')], bw)
-        ev, t = [], 0
-        for n in notes:
-            if t >= 24: break
-            ev.append([n.p.semi + 12, n.dur]); t += n.dur
+        ev = g['audio']
         ex = [x['num'] for x in D['scales'] if x['cat'] == bw['cat']][:6]
         exl = ', '.join(f'<a href="{fname(k)}">{k}</a>' for k in ex)
-        cards += f'''<div class="gcard"><div class="ex"><img src="{g['img'][0]}" alt="{E(g['name'])} example">{player(ev, [2, 4], 60, 90, met=False, label='Hear it')}</div>
+        cards += f'''<div class="gcard"><div class="ex"><img src="{g['img'][0]}" alt="{E(g['name'])} example">{player(ev, [2, 4], 60, 90, met=False, label='Hear it', dyn=g['dyn'])}</div>
 <div><div class="where">{E(g['where'])}</div><h3>{E(g['name'])}</h3><p>{E(g['how'])}</p>
 <p class="watch"><b>Watch for:</b> {E(g['mistake'])} <b>Fix:</b> {E(g['fix'])}</p>
 <p style="font-family:var(--sans);font-size:14px">Practice it in scales: {exl}</p></div></div>'''
