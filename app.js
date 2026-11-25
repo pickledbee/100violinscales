@@ -4,6 +4,13 @@
   if (btn) btn.addEventListener('click', function () { nav.classList.toggle('open'); });
 })();
 
+/* ---------- analytics events ---------- */
+function track(name, params) { try { if (typeof gtag === 'function') gtag('event', name, params || {}); } catch (e) { } }
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a[rel~="sponsored"]');
+  if (a) { var card = a.closest('.gitem'); track('amazon_click', { item_name: card ? card.querySelector('h3').textContent : a.href, link_url: a.href }); }
+});
+
 /* ---------- storage (per browser) ---------- */
 var Store = {
   key: 'v100-tracker',
@@ -307,6 +314,7 @@ function setupPlayers() {
           onProgress: function (x) { bar.style.width = (x * 100) + '%'; }, onEnd: reset
         });
       };
+      track('play_scale', { page_title: document.title, tempo: +range.value });
       if (Audio.isReady()) go();
       else { play.textContent = 'Loading violin…'; Audio.load().then(go); }
     });
