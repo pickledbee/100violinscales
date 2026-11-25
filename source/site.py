@@ -4,7 +4,7 @@ import book as BK
 import scales as S
 
 D = json.load(open('/home/claude/site_data.json'))
-OUT = '/home/claude/100violinscales/docs'
+OUT = '/home/claude/100violinscales'
 SITE = 'https://pickledbee.github.io/100violinscales/'
 E = html.escape
 

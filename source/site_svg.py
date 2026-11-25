@@ -6,7 +6,7 @@ import scales as S
 from scales import B, ORD
 from music import Staff, Note, parse, keysig_alters
 
-OUT = '/home/claude/100violinscales/docs'
+OUT = '/home/claude/100violinscales'
 IMG = os.path.join(OUT, 'img')
 os.makedirs(IMG, exist_ok=True)
 TMP = tempfile.mkdtemp()
