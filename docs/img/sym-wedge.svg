@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="70" height="56.96" viewBox="0 0 70 56.96">
+<path fill="none" stroke-width="0.5" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 8.000584 17.959975 L 60.00192 17.959975 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill="none" stroke-width="0.5" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 8.000584 25.961684 L 60.00192 25.961684 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill="none" stroke-width="0.5" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 8.000584 33.959484 L 60.00192 33.959484 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill="none" stroke-width="0.5" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 8.000584 41.961193 L 60.00192 41.961193 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill="none" stroke-width="0.5" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 8.000584 49.958993 L 60.00192 49.958993 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill-rule="evenodd" fill="rgb(0%, 0%, 0%)" fill-opacity="1" d="M 38.957031 32.78125 C 39.667969 30.832031 38.023438 28.445312 35.285156 27.449219 C 32.546875 26.449219 29.753906 27.222656 29.042969 29.171875 C 28.332031 31.125 29.976562 33.511719 32.714844 34.507812 C 35.453125 35.503906 38.25 34.734375 38.957031 32.78125 "/>
+<path fill="none" stroke-width="0.75" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="1" stroke-miterlimit="10" d="M 38.908993 27.161745 L 38.908993 53.961802 " transform="matrix(0.999298, 0, 0, -0.999298, 0.0245614, 56.920028)"/>
+<path fill-rule="evenodd" fill="rgb(0%, 0%, 0%)" fill-opacity="1" d="M 34 39.132812 L 31.441406 47.925781 L 36.558594 47.925781 Z M 34 39.132812 "/>
+</svg>

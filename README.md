@@ -2,6 +2,8 @@
 
 An intermediate scale and bowing workbook for violin by Bruce Bowers. Free to print and share.
 
+Free website: https://pickledbee.github.io/100violinscales/ (all 100 scales with play-along audio, metronome and a practice tracker)
+
 Download the book: [100-Violin-Scales-Positions-1-5.pdf](100-Violin-Scales-Positions-1-5.pdf)
 
 ## What is inside (172 pages)
@@ -12,10 +14,10 @@ Download the book: [100-Violin-Scales-Positions-1-5.pdf](100-Violin-Scales-Posit
 - Bonus: 28 arpeggios, a bowing guide, a fingerboard map, rhythm variations, a 12-week plan, a scale tracker and a practice log
 - Gear Guide: strings, rosin, shoulder rests, tuners, mutes, care, bows, stands and next-step books, with Amazon links
 
-## Rebuilding the PDF
+## Rebuilding the PDF and website
 
 The `source` folder holds the Python scripts that engrave the notation and lay out the book (ReportLab).
-Run `python3 source/book.py 100-Violin-Scales-Positions-1-5.pdf` from inside the `source` folder.
+Run `python3 book.py out.pdf` for the PDF. For the website, run `python3 site_svg.py` and then `python3 site.py`; the site is written to the `docs` folder, which GitHub Pages serves.
 
 ## Amazon affiliate disclosure
 
