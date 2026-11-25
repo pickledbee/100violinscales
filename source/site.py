@@ -5,7 +5,7 @@ import scales as S
 
 D = json.load(open('/home/claude/site_data.json'))
 OUT = '/home/claude/100violinscales'
-SITE = 'https://pickledbee.github.io/100violinscales/'
+SITE = 'https://freeviolinscales.com/'
 E = html.escape
 
 NAV = [('index.html', 'Scales'), ('start.html', 'Getting Started'), ('bowing.html', 'Bowing Guide'),
