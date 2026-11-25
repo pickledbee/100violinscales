@@ -86,7 +86,7 @@ class Book:
         s.c.setTitle('100 Violin Scales: Positions 1-5, Every Bowing, Every Slur Pattern')
         s.c.setAuthor('Bruce Bowers')
         s.c.setSubject('Intermediate violin scales and bowing workbook')
-        s.page = 1; s.section = ''; s.toc = []; s.started = False
+        s.page = 1; s.section = ''; s.toc = []; s.started = False; s.gear_page = None
 
     def new_page(s, furniture=True):
         if s.started:
@@ -103,6 +103,11 @@ class Book:
             c.setFont('Serif', 9.5); c.setFillColorRGB(*GREY)
             c.drawCentredString(W / 2, 30, str(s.page))
             c.setFont('Sans', 6.5); c.drawString(M, 30, '© 2026 Bruce Bowers')
+            if not s.section.startswith('Gear Guide') and getattr(s, 'gear_page', None):
+                t = f'Strings, rosin & gear for your level: Gear Guide, p. {s.gear_page}'
+                c.setFillColorRGB(*WINE); c.setFont('SansSB', 6.5); c.drawRightString(W - M, 30, t)
+                tw = c.stringWidth(t, 'SansSB', 6.5)
+                c.linkRect('', 'gear', (W - M - tw, 27, W - M, 38), relative=0)
         return H - 62
 
     def heading(s, y, kicker, title, sub=None):
@@ -212,11 +217,13 @@ def copyright_page(bk):
     y -= 22; c.setFillColorRGB(*GREY); c.setFont('SerifI', 13)
     c.drawCentredString(W / 2, y, 'Positions 1 through 5, Every Bowing, Every Slur Pattern')
     y -= 18; c.setFont('Sans', 10); c.drawCentredString(W / 2, y, 'by Bruce Bowers')
-    y = 380
+    y = 430
     c.setFillColorRGB(*INK); c.setFont('SansSB', 9); c.drawString(M + 60, y, 'COPYRIGHT'); y -= 16
-    y = para(c, '© 2026 Bruce Bowers. All rights reserved. No part of this book may be reproduced, shared, resold or posted online without written permission from the author, except as allowed by the license below.', M + 60, y, CW - 120, 'Serif', 10.5) - 14
-    c.setFont('SansSB', 9); c.drawString(M + 60, y, 'YOUR PRINT LICENSE'); y -= 16
-    y = para(c, 'Personal use: print as many copies as you like for your own practice. Teachers: you may print copies of any page for students in your own private studio or classroom. Please do not email the file to others or upload it to any website or shared drive.', M + 60, y, CW - 120, 'Serif', 10.5) - 14
+    y = para(c, '© 2026 Bruce Bowers. All rights reserved. This book may not be sold, changed or republished under another name.', M + 60, y, CW - 120, 'Serif', 10.5) - 14
+    c.setFont('SansSB', 9); c.drawString(M + 60, y, 'FREE TO PRINT AND SHARE'); y -= 16
+    y = para(c, 'This book is free. Print as many copies as you like, and share the PDF with students, teachers and friends, as long as it is shared whole and unchanged and is never sold.', M + 60, y, CW - 120, 'Serif', 10.5) - 14
+    c.setFont('SansSB', 9); c.drawString(M + 60, y, 'AMAZON AFFILIATE DISCLOSURE'); y -= 16
+    y = para(c, DISCLOSURE, M + 60, y, CW - 120, 'Serif', 10.5) - 14
     c.setFont('SansSB', 9); c.drawString(M + 60, y, 'A NOTE ON FINGERINGS'); y -= 16
     y = para(c, 'Fingerings in this book are one sound choice among several. Your teacher may suggest different fingerings to suit your hand, and that is exactly how it should be.', M + 60, y, CW - 120, 'Serif', 10.5)
 
@@ -608,7 +615,7 @@ def about_page(bk):
     y -= 20
     c.setFillColorRGB(*SOFT); c.roundRect(M, y - 92, CW, 92, 8, stroke=0, fill=1)
     c.setFillColorRGB(*WINE); c.setFont('SerifB', 15); c.drawString(M + 20, y - 28, 'Thank you for practicing with this book.')
-    para(c, 'If it helps you, the best thank-you is a short review where you bought it, and telling a friend or your teacher about it. More violin music and practice resources: fiddlemusicstore.com', M + 20, y - 48, CW - 40, 'Serif', 11, 14.5)
+    para(c, 'If it helps you, the best thank-you is to share this free book with a friend or your teacher. Need strings, rosin or a new shoulder rest? The Gear Guide links help support more free resources like this one. More violin music: fiddlemusicstore.com', M + 20, y - 48, CW - 40, 'Serif', 11, 14.5)
 
 
 # ---------------------------------------------------------------- full-page practice edition
@@ -770,6 +777,124 @@ def full_section(bk, toc, exs):
         finish_page(bk, y)
 
 
+# ---------------------------------------------------------------- gear guide (Amazon affiliate)
+from urllib.parse import quote_plus
+TAG = 'bumblepickleb-20'
+DISCLOSURE = ('As an Amazon Associate I earn from qualifying purchases. This book contains Amazon affiliate links. '
+              'If you buy something through one of them, I may earn a small commission at no extra cost to you. '
+              'Each link opens an Amazon search for that item, so you can compare sellers, sizes and current prices.')
+
+
+def amz(q):
+    return f'https://www.amazon.com/s?k={quote_plus(q)}&tag={TAG}'
+
+
+GEAR = [
+    ('Strings', 'A good set of strings is the fastest upgrade in tone at this level. Change them every 6 to 12 months.', [
+        ('Thomastik Dominant', 'The classic synthetic-core set: warm, even and reliable.', 'Thomastik Dominant violin strings 4/4 set'),
+        ('Pirastro Tonica', 'Warm and easy to play, and a great value.', 'Pirastro Tonica violin strings 4/4 set'),
+        ("D'Addario Pro-Arte", 'A smooth, mellow set for students moving up from steel.', "D'Addario Pro-Arte violin strings 4/4"),
+        ("D'Addario Helicore", 'Steel core: bright, stable and long-lasting.', "D'Addario Helicore violin strings 4/4"),
+        ('Pirastro Gold Label E', 'A favorite single E string that tames a shrill top end.', 'Pirastro Gold Label violin E string'),
+        ('Fine tuners', 'Make tuning steel or synthetic strings quick and precise.', 'violin fine tuners 4/4 set'),
+    ]),
+    ('Rosin', 'Fresh rosin gives a clean start to every note, especially in martelé and spiccato.', [
+        ('Hill Dark Rosin', 'Smooth grip that works for most players and climates.', 'Hill dark violin rosin'),
+        ('Pirastro Goldflex', 'Rosin with gold flakes for a clear, focused sound.', 'Pirastro Goldflex rosin violin'),
+        ("Jade L'Opera", 'Very low dust, and a fine choice for sensitive players.', "Jade L'Opera rosin violin"),
+        ('Bernardel Rosin', 'Light, low-dust rosin for a sweet tone.', 'Bernardel rosin violin'),
+    ]),
+    ('Shoulder Rests', 'The right rest frees the left hand for shifting into 3rd, 4th and 5th position.', [
+        ('Kun Original', 'Adjustable and the most widely used rest.', 'Kun Original violin shoulder rest 4/4'),
+        ('Bon Musica', 'Shapeable metal frame for a secure hold.', 'Bon Musica violin shoulder rest'),
+        ('Wolf Forte Secondo', 'Very adjustable in height and angle.', 'Wolf Forte Secondo violin shoulder rest'),
+        ('Everest EZ', 'Affordable and comfortable.', 'Everest EZ violin shoulder rest 4/4'),
+    ]),
+    ('Tuners & Metronomes', 'Every scale in this book has a tempo goal. A metronome is not optional.', [
+        ('Korg TM-60', 'Tuner and metronome in one, with a sound-back tone for intonation.', 'Korg TM-60 tuner metronome'),
+        ('Clip-on tuner', 'Tunes quietly without a phone.', 'Snark clip-on tuner violin'),
+        ('Korg MA-2 Metronome', 'Small, loud and simple.', 'Korg MA-2 metronome'),
+        ('Wittner Mechanical Metronome', 'A classic pendulum metronome for the practice room.', 'Wittner mechanical metronome'),
+    ]),
+    ('Mutes', 'For practicing late or early without bothering the house, and for soft orchestra passages.', [
+        ('Heavy rubber practice mute', 'Cuts the sound way down for quiet practice.', 'violin practice mute heavy rubber'),
+        ('Tourte mute', 'The standard orchestra mute.', 'Tourte violin mute'),
+    ]),
+    ('Care & Humidity', 'Dry winter air cracks wood and slips pegs. Keep the instrument clean and humidified.', [
+        ('Dampit humidifier', 'Sits inside the f-hole to keep the violin from drying out.', 'Dampit violin humidifier'),
+        ('Case hygrometer', 'Shows the humidity inside your case at a glance.', 'violin case hygrometer'),
+        ('Microfiber polishing cloth', 'Wipe off rosin dust after every practice.', 'violin microfiber polishing cloth'),
+        ('Peg compound', 'Stops slipping or sticking pegs.', 'Hill peg compound violin'),
+    ]),
+    ('Bows, Cases & Stands', 'Upgrades that make practice easier and protect your instrument.', [
+        ('Carbon fiber bow', 'Durable, well balanced and good for off-the-string strokes.', 'carbon fiber violin bow 4/4'),
+        ('Oblong violin case', 'Room for music, rosin and spare strings.', 'oblong violin case 4/4 with hygrometer'),
+        ('Manhasset music stand', 'The sturdy stand used by orchestras everywhere.', 'Manhasset music stand'),
+        ('Music stand light', 'Clip-on LED light for reading small print.', 'music stand light clip on LED'),
+    ]),
+    ('Practice Tools', 'Tools that help you see and hear what you are doing.', [
+        ('Practice mirror', 'Check that the bow stays parallel to the bridge.', 'full length standing mirror'),
+        ('Zoom H1n recorder', 'Record yourself and hear your intonation honestly.', 'Zoom H1n handy recorder'),
+        ('Pencils for your music', 'Mark fingerings, bowings and reminders.', 'pencils with erasers bulk'),
+    ]),
+    ('Next-Step Books', 'Studies and method books that pair well with this book.', [
+        ('Whistler: Introducing the Positions, Vol. 1', '3rd and 5th positions, step by step.', 'Whistler Introducing the Positions violin volume 1'),
+        ('Whistler: Introducing the Positions, Vol. 2', '2nd, 4th, 6th and 7th positions.', 'Whistler Introducing the Positions violin volume 2'),
+        ('Wohlfahrt: 60 Studies, Op. 45', 'The classic first etudes for bowing and positions.', 'Wohlfahrt 60 Studies Op 45 violin'),
+        ('Ševčík: Changes of Position, Op. 8', 'Focused shifting exercises.', 'Sevcik Op 8 changes of position violin'),
+        ('Schradieck: School of Violin Technics, Book 1', 'Left-hand finger strength and accuracy.', 'Schradieck School of Violin Technics book 1'),
+        ('Kreutzer: 42 Studies', 'The next big step in bowing and technique.', 'Kreutzer 42 studies violin'),
+    ]),
+]
+
+
+def gear_pages(bk, toc):
+    c = bk.c; bk.section = 'Gear Guide'
+    y = bk.new_page()
+    c.bookmarkPage('gear')
+    toc.append(('Gear Guide', 'Strings, rosin, shoulder rests, tuners, care and next-step books', bk.page, 0))
+    y = bk.heading(y, 'For the intermediate violinist', 'Gear Guide',
+                   'Everything a violinist at this level needs, from strings and rosin to the next books to study. Tap any button to see the item on Amazon.')
+    # disclosure box
+    h = para_h(DISCLOSURE, CW - 28, 'Serif', 9.5, 12) + 24
+    c.setFillColorRGB(*SOFT); c.roundRect(M, y - h + 8, CW, h, 6, stroke=0, fill=1)
+    c.setFillColorRGB(*WINE); c.setFont('SansB', 8); c.drawString(M + 14, y - 6, 'AMAZON AFFILIATE DISCLOSURE')
+    y = para(c, DISCLOSURE, M + 14, y - 20, CW - 28, 'Serif', 9.5, 12, color=(0.3, 0.27, 0.27)) - 18
+    colw = (CW - 14) / 2
+    for cat, intro, items in GEAR:
+        need = 40 + 54
+        if y - need < 56:
+            y = bk.new_page()
+        c.setFillColorRGB(*WINE); c.setFont('SerifB', 16); c.drawString(M, y, cat)
+        c.setStrokeColorRGB(*GOLD); c.setLineWidth(1.2); c.line(M, y - 6, M + 40, y - 6)
+        y = para(c, intro, M, y - 20, CW, 'SerifI', 10, 12.5, color=GREY) - 4
+        for i in range(0, len(items), 2):
+            row = items[i:i + 2]
+            ch = 58
+            if y - ch < 50:
+                y = bk.new_page()
+            for j, (name, why, q) in enumerate(row):
+                x = M + j * (colw + 14)
+                c.setStrokeColorRGB(*LINE); c.setLineWidth(0.7); c.setFillColorRGB(1, 1, 1)
+                c.roundRect(x, y - ch, colw, ch - 4, 6, stroke=1, fill=1)
+                c.setFillColorRGB(*INK); c.setFont('SerifB', 11.5)
+                nm = name
+                while c.stringWidth(nm, 'SerifB', 11.5) > colw - 20: nm = nm[:-2]
+                c.drawString(x + 10, y - 17, nm)
+                para(c, why, x + 10, y - 30, colw - 100, 'Serif', 8.8, 10.5, color=(0.3, 0.27, 0.27))
+                bx, bw_, bh = x + colw - 84, 74, 20
+                c.setFillColorRGB(*GOLD); c.roundRect(bx, y - ch + 10, bw_, bh, 10, stroke=0, fill=1)
+                c.setFillColorRGB(1, 1, 1); c.setFont('SansB', 8); c.drawCentredString(bx + bw_ / 2, y - ch + 17, 'See on Amazon')
+                url = amz(q)
+                c.linkURL(url, (bx, y - ch + 10, bx + bw_, y - ch + 10 + bh), relative=0)
+                c.linkURL(url, (x, y - ch, x + colw, y - 4), relative=0)
+            y -= ch + 4
+        y -= 14
+    y -= 4
+    if y < 90: y = bk.new_page()
+    para(c, 'Prices and availability change on Amazon. Ask your teacher before changing strings or a shoulder rest if you are unsure what fits your violin.', M, y, CW, 'SerifI', 9.5, 12, color=GREY)
+
+
 # ---------------------------------------------------------------- build
 def build(fn):
     exs = S.make_exercises() + S.make_shift_exercises()
@@ -824,6 +949,7 @@ def build(fn):
         tracker_pages(bk, allex)
         toc.append(('Weekly Practice Log', None, bk.page + 1, 1))
         log_page(bk)
+        gear_pages(bk, toc)
         about_page(bk)
         toc.append(('About the Author', None, bk.page, 0))
         return toc
@@ -831,7 +957,8 @@ def build(fn):
     import os
     dry = Book(os.devnull)
     toc = run(dry)
-    bk = Book(fn)
+    gp = [p for t, s_, p, l in toc if t == 'Gear Guide'][0]
+    bk = Book(fn); bk.gear_page = gp
     run(bk, toc)
     bk.save()
     return bk.page
